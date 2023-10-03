@@ -48,12 +48,23 @@ public class ProcessorApi {
                     // Save reference of the context
                     // Retrieve the store and save a reference
                     // Schedule a punctuation  HINT: use context.schedule and the method you want to call is forwardAll
+                    this.context = context;
+                    this.store = context.getStateStore(storeName);
+
+                    context.schedule(Duration.ofSeconds(10), PunctuationType.STREAM_TIME, this::forwardAll);
                 }
 
                 private void forwardAll(final long timestamp) {
                     // Get a KeyValueIterator HINT there's a method on the KeyValueStore
                     // Don't forget to close the iterator! HINT use try-with resources
                     // Iterate over the records and create a Record instance and forward downstream HINT use a method on the ProcessorContext to forward
+                    try (var iterator = store.all()){
+                        while (iterator.hasNext()){
+                            var keyValue = iterator.next();
+                            context.forward(new Record<>(keyValue.key, keyValue.value, timestamp));
+                            System.out.println("Punctuation forwarded record - key " + keyValue.key + " value " + keyValue.value);
+                        }
+                    }
                 }
 
                 @Override
@@ -62,6 +73,14 @@ public class ProcessorApi {
                     // Don't forget to check for null
                     // Add the price from the value to the current total from store and put it in the store
                     // HINT state stores are key-value stores
+                    var key = record.key();
+                    var actualValue = store.get(key);
+                    if(actualValue == null) {
+                        store.put(key, 0.0);
+                    } else {
+                        store.put(key, actualValue + record.value().getPrice());
+                    }
+                    System.out.println("Processed incoming record - key " + key + " value " + record.value());
                 }
             };
         }
@@ -91,6 +110,13 @@ public class ProcessorApi {
         final Serde<Double> doubleSerde = Serdes.Double();
 
         final Topology topology = new Topology();
+
+        String sourceName = "source-node";
+        topology.addSource(sourceName, stringSerde.deserializer() , electronicSerde.deserializer(), inputTopic);
+        String processorName = "processor-node";
+        topology.addProcessor(processorName, new TotalPriceOrderProcessorSupplier(storeName), sourceName);
+        topology.addSink("sink-name", outputTopic, stringSerde.serializer(), doubleSerde.serializer(), processorName);
+
 
         // Add a source node to the topology  HINT: topology.addSource
         // Give it a name, add deserializers for the key and the value and provide the input topic name

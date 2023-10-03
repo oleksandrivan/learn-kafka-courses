@@ -29,8 +29,8 @@ public class StreamsTimestampExtractor {
         public long extract(ConsumerRecord<Object, Object> record, long partitionTime) {
             // Extract the timestamp from the value in the record
             // and return that instead
-            return -1L;
-
+            final ElectronicOrder order = (ElectronicOrder) record.value();
+            return order.getTime();
         }
     }
 
@@ -49,7 +49,7 @@ public class StreamsTimestampExtractor {
 
         final KStream<String, ElectronicOrder> electronicStream =
                 builder.stream(inputTopic,
-                                Consumed.with(Serdes.String(), electronicSerde))
+                                Consumed.with(Serdes.String(), electronicSerde).withTimestampExtractor(new OrderTimestampExtractor()))
                         //Wire up the timestamp extractor HINT do it on the Consumed object vs configs
                         .peek((key, value) -> System.out.println("Incoming record - key " + key + " value " + value));
 

@@ -39,7 +39,12 @@ public class StreamsAggregate {
 
         // Now take the electronicStream object, group by key and perform an aggregation
         // Don't forget to convert the KTable returned by the aggregate call back to a KStream using the toStream method
-        electronicStream.groupByKey().aggregate(null, null);
+        electronicStream.groupByKey().aggregate(() -> 0.0,
+                        (key, value, aggregate) -> aggregate + value.getPrice(),
+                        Materialized.with(Serdes.String(), Serdes.Double())
+                ).toStream()
+                .peek((key, value) -> System.out.println("Outgoing record - key " + key + " value " + value))
+                .to(outputTopic, Produced.with(Serdes.String(), Serdes.Double()));
 
         // To view the results of the aggregation consider
         // right after the toStream() method .peek((key, value) -> System.out.println("Outgoing record - key " +key +" value " + value))

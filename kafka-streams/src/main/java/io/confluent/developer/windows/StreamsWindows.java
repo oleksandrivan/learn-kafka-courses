@@ -8,11 +8,7 @@ import org.apache.kafka.streams.KafkaStreams;
 import org.apache.kafka.streams.KeyValue;
 import org.apache.kafka.streams.StreamsBuilder;
 import org.apache.kafka.streams.StreamsConfig;
-import org.apache.kafka.streams.kstream.Consumed;
-import org.apache.kafka.streams.kstream.KStream;
-import org.apache.kafka.streams.kstream.Materialized;
-import org.apache.kafka.streams.kstream.Produced;
-import org.apache.kafka.streams.kstream.TimeWindows;
+import org.apache.kafka.streams.kstream.*;
 
 import java.io.IOException;
 import java.time.Duration;
@@ -44,14 +40,17 @@ public class StreamsWindows {
 
         electronicStream.groupByKey()
                 // Window the aggregation by the hour and allow for records to be up 5 minutes late
+                .windowedBy(TimeWindows.ofSizeAndGrace(Duration.ofHours(1), Duration.ofMinutes(5)))
                 .aggregate(() -> 0.0,
                         (key, order, total) -> total + order.getPrice(),
                         Materialized.with(Serdes.String(), Serdes.Double()))
                 // Don't emit results until the window closes HINT suppression
+                .suppress(untilWindowCloses(unbounded()))
                 .toStream()
                 // When windowing Kafka Streams wraps the key in a Windowed class
                 // After converting the table to a stream it's a good idea to extract the
-                // Underlying key from the Windowed instance HINT: use map 
+                // Underlying key from the Windowed instance HINT: use map
+                .map((key, value) -> KeyValue.pair(key.key(), value) )
                 .peek((key, value) -> System.out.println("Outgoing record - key " + key + " value " + value))
                 .to(outputTopic, Produced.with(Serdes.String(), Serdes.Double()));
 
